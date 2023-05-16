@@ -1,0 +1,92 @@
+﻿@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 12px;
+    font-family: 'Montserrat',sans-serif;
+}
+
+.section-title {
+    font-size: 4rem;
+    color: black;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: .2rem;
+    text-align: center;
+}
+
+    .section-title span {
+        color: rgb(49, 135, 106);
+    }
+
+p {
+    color: black;
+    font-size: 1.4rem;
+    letter-spacing: 0.06rem;
+    font-weight: 300;
+    line-height: 2rem;
+}
+
+a {
+    text-decoration: none;
+}
+
+.container {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Hero Section */
+.hero {
+    max-width: 1200px;
+}
+
+#hero {
+    background-image: url(img/th.jpeg);
+    background-size: cover;
+    background-position: top center;
+    position: relative;
+    z-index: 1;
+}
+
+    #hero::after {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 100%;
+        background-color: black;
+        opacity: 0.7;
+        z-index: -1;
+    }
+
+    #hero h1 {
+        display: block;
+        width: fit-content;
+        font-size: 4rem;
+        position: relative;
+        color: antiquewhite;
+    }
+
+.cta {
+    display: inline-block;
+    padding: 10px 30px;
+    color: rgb(70, 209, 70);
+    border: 2px solid green;
+    font-size: 2rem;
+    letter-spacing: .2rem;
+    margin: 30px;
+}
+
+    .cta:hover {
+        color: brown;
+        background-color: blue;
+    }
+/*Hero section*/
