@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ICT Trade Plan Builder</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1, h2 { margin-bottom: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(250px, 1fr)); gap: 10px; }
+    label { display: block; font-size: 12px; color: #93c5fd; margin-bottom: 4px; }
+    input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #334155; background: #020617; color: #e2e8f0; }
+    textarea { min-height: 90px; }
+    section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+    button { background: #2563eb; border: none; color: white; padding: 10px 14px; border-radius: 6px; cursor: pointer; margin-right: 8px; }
+    button.secondary { background: #374151; }
+    pre { white-space: pre-wrap; background: #020617; padding: 12px; border-radius: 8px; border: 1px solid #334155; max-height: 75vh; overflow: auto; }
+    .small { font-size: 12px; color: #94a3b8; }
+    .checklist { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 8px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ICT Deterministic Trade Plan Builder</h1>
+  <p class="small">Enter your chart values. The tool outputs a deterministic, automation-ready plan. It will block setup if required inputs are missing.</p>
+
+  <section>
+    <h2>Session Variables</h2>
+    <div class="grid">
+      <div><label>Instrument</label><input id="instrument" /></div>
+      <div><label>Current Price</label><input id="currentPrice" type="number" step="0.0001" /></div>
+      <div><label>Current Date & Time (NY)</label><input id="dtNy" type="datetime-local" /></div>
+      <div><label>Account Type</label><select id="accountType"><option>Demo</option><option>Live</option><option>Prop Firm</option></select></div>
+      <div><label>Contracts / Lots</label><input id="contracts" type="number" step="0.01" /></div>
+      <div><label>Max SL Risk (USD)</label><input id="maxRisk" type="number" step="0.01" /></div>
+      <div><label>Point / Tick Value (USD)</label><input id="tickValue" type="number" step="0.01" /></div>
+      <div><label>Major News (time + type)</label><input id="news" placeholder="8:30 AM CPI / None" /></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Price References</h2>
+    <div class="grid">
+      <div><label>Yearly Open</label><input id="yearlyOpen" type="number" step="0.0001" /></div>
+      <div><label>Quarterly Open</label><input id="quarterlyOpen" type="number" step="0.0001" /></div>
+      <div><label>Quarterly High</label><input id="quarterlyHigh" type="number" step="0.0001" /></div>
+      <div><label>Quarterly Low</label><input id="quarterlyLow" type="number" step="0.0001" /></div>
+      <div><label>Monthly Open</label><input id="monthlyOpen" type="number" step="0.0001" /></div>
+      <div><label>Weekly Open</label><input id="weeklyOpen" type="number" step="0.0001" /></div>
+      <div><label>Daily Open</label><input id="dailyOpen" type="number" step="0.0001" /></div>
+      <div><label>PDH</label><input id="pdh" type="number" step="0.0001" /></div>
+      <div><label>PDL</label><input id="pdl" type="number" step="0.0001" /></div>
+      <div><label>PDC</label><input id="pdc" type="number" step="0.0001" /></div>
+      <div><label>Today High</label><input id="todayHigh" type="number" step="0.0001" /></div>
+      <div><label>Today Low</label><input id="todayLow" type="number" step="0.0001" /></div>
+      <div><label>Asian High</label><input id="asiaHigh" type="number" step="0.0001" /></div>
+      <div><label>Asian Low</label><input id="asiaLow" type="number" step="0.0001" /></div>
+      <div><label>NWOG High</label><input id="nwogHigh" type="number" step="0.0001" /></div>
+      <div><label>NWOG Low</label><input id="nwogLow" type="number" step="0.0001" /></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Execution Inputs</h2>
+    <div class="grid">
+      <div><label>Direction</label><select id="direction"><option>LONG</option><option>SHORT</option></select></div>
+      <div><label>Killzone</label><select id="killzone"><option>London 2:00–5:00 AM</option><option>NY AM 8:00–11:00 AM</option><option>NY PM 1:30–4:00 PM</option><option>Asian 7:00–9:00 PM</option></select></div>
+      <div><label>Entry Price</label><input id="entry" type="number" step="0.0001" /></div>
+      <div><label>Stop Loss</label><input id="sl" type="number" step="0.0001" /></div>
+      <div><label>TP1</label><input id="tp1" type="number" step="0.0001" /></div>
+      <div><label>TP2</label><input id="tp2" type="number" step="0.0001" /></div>
+      <div><label>TP3</label><input id="tp3" type="number" step="0.0001" /></div>
+      <div><label>Draw on Liquidity Target</label><input id="drawTarget" placeholder="Weekly BSL 25120" /></div>
+    </div>
+    <div class="grid-2" style="margin-top:10px;">
+      <div><label>Entry Condition (rule-based)</label><textarea id="entryCondition"></textarea></div>
+      <div><label>Invalidation Condition</label><textarea id="invalidation"></textarea></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Checklist (set Y/N)</h2>
+    <div class="checklist" id="checklist"></div>
+  </section>
+
+  <button id="generate">Generate Full Report</button>
+  <button class="secondary" id="copy">Copy Output</button>
+
+  <section>
+    <h2>Generated Output</h2>
+    <pre id="out">Fill inputs and click "Generate Full Report".</pre>
+  </section>
+</div>
+
+<script>
+const checklistItems = [
+  "Yearly, Quarterly, Monthly, Weekly, Daily bias aligned",
+  "Price on correct side of Daily Open",
+  "Judas Swing fired and confirmed",
+  "Liquidity pool swept (BSL or SSL)",
+  "1H MSS confirmed with exact price",
+  "15-min MSS confirmed with exact price",
+  "5-min MSS confirmed with exact price",
+  "5-min OB/FVG zone identified with exact prices",
+  "1-min OB trigger identified inside 5-min zone",
+  "Entry is within active Killzone window",
+  "SL is within max dollar risk limit",
+  "Minimum R:R of at least 1:2 achieved at TP1",
+  "No conflicting high-impact news in next 30 minutes",
+  "NWOG / HTF PD Array confluence at entry zone",
+  "SMT divergence confirmed (if applicable)"
+];
+
+function fmt(n){ return Number(n).toFixed(4); }
+function val(id){ return document.getElementById(id).value.trim(); }
+function num(id){ return Number(val(id)); }
+function activeSessionFromHour(h){
+  if (h>=18 || h<2) return "Asian";
+  if (h>=2 && h<8) return "London";
+  if (h>=8 && h<11.5) return "NY AM";
+  if (h>=13.5 && h<16) return "NY PM";
+  return "Out of Killzone";
+}
+
+const checklistContainer = document.getElementById("checklist");
+checklistItems.forEach((item, idx)=>{
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<label>${idx+1}. ${item}</label><select id="c${idx+1}"><option>Y</option><option>N</option></select>`;
+  checklistContainer.appendChild(wrap);
+});
+
+function rr(direction, entry, sl, tp){
+  const risk = Math.abs(entry - sl);
+  if (!risk) return 0;
+  const reward = direction === "LONG" ? (tp - entry) : (entry - tp);
+  return reward / risk;
+}
+
+document.getElementById("generate").addEventListener("click", ()=>{
+  const required = ["instrument","currentPrice","dtNy","contracts","maxRisk","tickValue","yearlyOpen","quarterlyOpen","quarterlyHigh","quarterlyLow","monthlyOpen","weeklyOpen","dailyOpen","pdh","pdl","pdc","todayHigh","todayLow","asiaHigh","asiaLow","nwogHigh","nwogLow","entry","sl","tp1","tp2","tp3","entryCondition","invalidation","drawTarget"];
+  const missing = required.filter(id => !val(id));
+
+  if (missing.length){
+    document.getElementById("out").textContent = `MISSING DATA: ${missing.join(", ")} — NO TRADE until filled.`;
+    return;
+  }
+
+  const direction = val("direction");
+  const entry = num("entry"), sl = num("sl"), tp1 = num("tp1"), tp2 = num("tp2"), tp3 = num("tp3");
+  const contracts = num("contracts"), tick = num("tickValue"), maxRisk = num("maxRisk");
+  const slDist = Math.abs(entry - sl);
+  const slDollarRisk = slDist * tick * contracts;
+
+  const dayHigh = num("todayHigh"), dayLow = num("todayLow");
+  const eq50 = (dayHigh + dayLow)/2;
+  const ote62 = dayLow + (dayHigh - dayLow)*0.62;
+  const ote79 = dayLow + (dayHigh - dayLow)*0.79;
+  const nq50 = (num("nwogHigh") + num("nwogLow"))/2;
+  const qeq = (num("quarterlyHigh") + num("quarterlyLow"))/2;
+
+  const dt = new Date(val("dtNy"));
+  const h = dt.getHours() + dt.getMinutes()/60;
+  const active = activeSessionFromHour(h);
+
+  const yCount = checklistItems.reduce((acc, _, i)=> acc + (val(`c${i+1}`)==="Y" ? 1 : 0), 0);
+  const riskOk = slDollarRisk <= maxRisk;
+  const rr1 = rr(direction, entry, sl, tp1);
+  const minRrOk = rr1 >= 2;
+
+  let verdict = "NO TRADE — conditions not met, wait for next killzone.";
+  if (yCount === 15) verdict = "EXECUTE TRADE — A+ SETUP.";
+  else if (yCount >= 12) verdict = "B SETUP — Reduce position size by 50%.";
+
+  const noTrade = !riskOk || !minRrOk;
+
+  const output = `SESSION VARIABLES\nInstrument: ${val("instrument")}\nCurrent Price: ${fmt(num("currentPrice"))}\nCurrent Date & Time (NY local): ${dt.toLocaleString("en-US", { hour12: true })}\nActive Session: ${active}\nAccount Type: ${val("accountType")}\nContracts / Lots: ${val("contracts")}\nMax SL Risk (USD): ${fmt(maxRisk)}\nPoint / Tick Value: ${fmt(tick)}\nYearly Open Price: ${fmt(num("yearlyOpen"))}\nQuarterly Open Price: ${fmt(num("quarterlyOpen"))}\nMonthly Open Price: ${fmt(num("monthlyOpen"))}\nWeekly Open Price: ${fmt(num("weeklyOpen"))}\nDaily Open Price: ${fmt(num("dailyOpen"))}\nPDH: ${fmt(num("pdh"))}\nPDL: ${fmt(num("pdl"))}\nPDC: ${fmt(num("pdc"))}\nToday's Session High: ${fmt(dayHigh)}\nToday's Session Low: ${fmt(dayLow)}\nAsian Range High: ${fmt(num("asiaHigh"))}\nAsian Range Low: ${fmt(num("asiaLow"))}\nNWOG High/Low: ${fmt(num("nwogHigh"))} / ${fmt(num("nwogLow"))}\nMajor News: ${val("news") || "None"}\n\nPHASE 1 SNAPSHOT\nQuarterly EQ (50%): ${fmt(qeq)}\nDaily EQ (50%): ${fmt(eq50)}\nDaily OTE 62%: ${fmt(ote62)}\nDaily OTE 79%: ${fmt(ote79)}\nNWOG CE (50%): ${fmt(nq50)}\n\n---TRADE PLAN START---\nINSTRUMENT: ${val("instrument")}\nDIRECTION: ${direction}\nDATE/TIME (NY): ${dt.toLocaleString("en-US", { hour12: true })}\nKILLZONE: ${val("killzone")}\n\nENTRY PRICE: ${fmt(entry)}\nENTRY TYPE: Market on confirmation\nENTRY CONDITION: ${val("entryCondition")}\n\nSTOP LOSS: ${fmt(sl)}\nSL DISTANCE (points): ${fmt(slDist)}\nSL DOLLAR RISK: ${fmt(slDollarRisk)}\n\nTP1: ${fmt(tp1)} | Distance: ${fmt(Math.abs(tp1-entry))} | R:R: ${rr1.toFixed(2)} | Action: Close 33%\nTP2: ${fmt(tp2)} | Distance: ${fmt(Math.abs(tp2-entry))} | R:R: ${rr(direction,entry,sl,tp2).toFixed(2)} | Action: Close 33%\nTP3: ${fmt(tp3)} | Distance: ${fmt(Math.abs(tp3-entry))} | R:R: ${rr(direction,entry,sl,tp3).toFixed(2)} | Action: Close 34%\n\nDRAW ON LIQUIDITY TARGET: ${val("drawTarget")}\nINVALIDATION: ${val("invalidation")}\nBEST EXECUTION WINDOW: ${val("killzone")}\nMAX HOLD TIME: Exit by end of killzone regardless of outcome.\n---TRADE PLAN END---\n\n${noTrade ? "NO VALID TRADE — RISK OR R:R CONDITIONS NOT MET." : "RISK/R:R VALID."}\n\nGO / NO-GO\nY Count: ${yCount}/15\nVerdict: ${verdict}\n\nFinal Sentence: ${noTrade ? "NO TRADE." : verdict}`;
+
+  document.getElementById("out").textContent = output;
+});
+
+document.getElementById("copy").addEventListener("click", async ()=>{
+  const t = document.getElementById("out").textContent;
+  await navigator.clipboard.writeText(t);
+  alert("Output copied.");
+});
+</script>
+</body>
+</html>
