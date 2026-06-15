@@ -1,18 +1,18 @@
-"""Command-line interface for ictbot.
+"""Command-line interface for ictbot — all 5 ICT systems.
 
-Examples
+Commands
 --------
-    # generate sample data and back-test the model on it
-    python -m ictbot.cli demo --symbol NQ --days 60
+    # ── Cat 1: 9:30 AM Open Model ──────────────────────────────────────────
+    python -m ictbot demo --symbol NQ --days 60          # synthetic backtest
+    python -m ictbot backtest --symbol NQ --csv data/my_data.csv
+    python -m ictbot paper --symbol NQ --csv data/sample_NQ_1m.csv
 
-    # generate and save synthetic data to a CSV
-    python -m ictbot.cli gen --days 60 --out data/sample_NQ_1m.csv
+    # ── All 5 systems in one run ────────────────────────────────────────────
+    python -m ictbot multidemo --symbol NQ --days 60     # synthetic multi-system
+    python -m ictbot multibacktest --symbol NQ --csv data/my_data.csv
 
-    # back-test against your own CSV (columns: time,open,high,low,close,volume)
-    python -m ictbot.cli backtest --symbol NQ --csv data/my_data.csv
-
-    # paper-trade by streaming a CSV bar-by-bar (no live broker required)
-    python -m ictbot.cli paper --symbol NQ --csv data/sample_NQ_1m.csv
+    # ── Utilities ───────────────────────────────────────────────────────────
+    python -m ictbot gen --days 60 --out data/sample_NQ_1m.csv
 """
 
 from __future__ import annotations
@@ -27,28 +27,36 @@ from .data import generate_sessions, load_csv, write_csv
 from .models import Candle, Trade
 
 
-# Representative starting price per product, so synthetic data is scaled
-# realistically (NQ/MNQ trade ~18,000; ES/MES ~5,000).
+# Representative starting prices so synthetic data is realistically scaled.
 DEFAULT_START_PRICE = {"NQ": 18_000.0, "MNQ": 18_000.0,
                        "ES": 5_000.0, "MES": 5_000.0}
 
 
+def _start_price(symbol: str) -> float:
+    return DEFAULT_START_PRICE.get(symbol.upper(), 18_000.0)
+
+
+# ------------------------------------------------------------------- helpers
 def _print_trades(trades: List[Trade]) -> None:
     if not trades:
-        print("\nNo trades were taken.")
+        print("\n  No trades were taken.")
         return
-    print("\n date       time   model         dir   entry     stop    target"
+    print("\n date       time   system               dir   entry     stop    target"
           "   exit      R     result")
-    print(" " + "-" * 86)
+    print(" " + "-" * 96)
     for t in trades:
         s = t.signal
-        print(f" {t.entry_time:%Y-%m-%d %H:%M}  {s.model:<12} "
+        sys_tag = t.tags.get("system", s.model)
+        print(f" {t.entry_time:%Y-%m-%d %H:%M}  {sys_tag:<20} "
               f"{s.direction.name:<5} {s.entry:8.2f} {s.stop:8.2f} "
-              f"{s.target:8.2f} {('-' if t.exit_price is None else f'{t.exit_price:8.2f}')} "
-              f"{t.r_multiple:+5.2f}  {t.exit_reason.value if t.exit_reason else '-'}")
+              f"{s.target:8.2f} "
+              f"{('-' if t.exit_price is None else f'{t.exit_price:8.2f}')} "
+              f"{t.r_multiple:+5.2f}  "
+              f"{t.exit_reason.value if t.exit_reason else '-'}")
 
 
-def _run_backtest(cfg: Config, candles: List[Candle], show_trades: bool) -> int:
+def _run_single_backtest(cfg: Config, candles: List[Candle],
+                         show_trades: bool) -> int:
     if not candles:
         print("No candles to back-test.", file=sys.stderr)
         return 1
@@ -59,8 +67,25 @@ def _run_backtest(cfg: Config, candles: List[Candle], show_trades: bool) -> int:
     return 0
 
 
+def _run_multi_backtest(cfg: Config, candles: List[Candle],
+                        show_trades: bool) -> int:
+    if not candles:
+        print("No candles to back-test.", file=sys.stderr)
+        return 1
+    from .runner import MultiSystemRunner
+    runner = MultiSystemRunner(cfg)
+    result = runner.run(candles)
+    print(result.summary())
+    if show_trades:
+        all_trades = sorted(
+            [t for sys in result.systems.values() for t in sys.trades],
+            key=lambda t: t.entry_time,
+        )
+        _print_trades(all_trades)
+    return 0
+
+
 def _paper_stream(cfg: Config, candles: List[Candle]) -> int:
-    """Replay candles one at a time through the live runner (paper mode)."""
     from .live import LiveRunner
     runner = LiveRunner(cfg)
     for c in candles:
@@ -71,32 +96,50 @@ def _paper_stream(cfg: Config, candles: List[Candle]) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ CLI
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="ictbot",
-                                description="ICT 9:30 Open Model trading system")
+                                description="ICT automated trading systems")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--symbol", default="NQ", help="instrument (NQ/ES/MNQ/MES)")
+    common.add_argument("--symbol", default="NQ",
+                        help="instrument (NQ / ES / MNQ / MES)")
 
-    g = sub.add_parser("gen", parents=[common], help="generate synthetic data")
+    # ---- gen ----
+    g = sub.add_parser("gen", parents=[common],
+                       help="generate and save synthetic 1-min data")
     g.add_argument("--days", type=int, default=40)
     g.add_argument("--seed", type=int, default=7)
     g.add_argument("--out", required=True)
 
+    # ---- Cat 1 single-system commands ----
     d = sub.add_parser("demo", parents=[common],
-                       help="generate data and back-test in one step")
+                       help="[Cat1] generate + backtest 9:30 Open Model")
     d.add_argument("--days", type=int, default=60)
     d.add_argument("--seed", type=int, default=7)
-    d.add_argument("--no-trades", action="store_true", help="hide trade list")
+    d.add_argument("--no-trades", action="store_true")
 
-    b = sub.add_parser("backtest", parents=[common], help="back-test a CSV")
+    b = sub.add_parser("backtest", parents=[common],
+                       help="[Cat1] backtest 9:30 Open Model against a CSV")
     b.add_argument("--csv", required=True)
     b.add_argument("--no-trades", action="store_true")
 
     pp = sub.add_parser("paper", parents=[common],
-                        help="paper-trade by streaming a CSV")
+                        help="[Cat1] paper-trade 9:30 Open Model from a CSV")
     pp.add_argument("--csv", required=True)
+
+    # ---- All-5-system commands ----
+    md = sub.add_parser("multidemo", parents=[common],
+                        help="[ALL 5] generate + backtest all systems")
+    md.add_argument("--days", type=int, default=60)
+    md.add_argument("--seed", type=int, default=7)
+    md.add_argument("--no-trades", action="store_true")
+
+    mb = sub.add_parser("multibacktest", parents=[common],
+                        help="[ALL 5] backtest all systems against a CSV")
+    mb.add_argument("--csv", required=True)
+    mb.add_argument("--no-trades", action="store_true")
 
     args = p.parse_args(argv)
     cfg = Config.for_symbol(args.symbol)
@@ -104,25 +147,32 @@ def main(argv=None) -> int:
 
     if args.cmd == "gen":
         candles = generate_sessions(args.days, args.seed,
-            start_price=DEFAULT_START_PRICE.get(args.symbol.upper(), 18_000.0),
-            tick=tick)
+                                    start_price=_start_price(args.symbol),
+                                    tick=tick)
         write_csv(args.out, candles)
         print(f"Wrote {len(candles)} candles -> {args.out}")
         return 0
 
     if args.cmd == "demo":
         candles = generate_sessions(args.days, args.seed,
-            start_price=DEFAULT_START_PRICE.get(args.symbol.upper(), 18_000.0),
-            tick=tick)
-        return _run_backtest(cfg, candles, show_trades=not args.no_trades)
+                                    start_price=_start_price(args.symbol),
+                                    tick=tick)
+        return _run_single_backtest(cfg, candles, not args.no_trades)
 
     if args.cmd == "backtest":
-        candles = load_csv(args.csv)
-        return _run_backtest(cfg, candles, show_trades=not args.no_trades)
+        return _run_single_backtest(cfg, load_csv(args.csv), not args.no_trades)
 
     if args.cmd == "paper":
-        candles = load_csv(args.csv)
-        return _paper_stream(cfg, candles)
+        return _paper_stream(cfg, load_csv(args.csv))
+
+    if args.cmd == "multidemo":
+        candles = generate_sessions(args.days, args.seed,
+                                    start_price=_start_price(args.symbol),
+                                    tick=tick)
+        return _run_multi_backtest(cfg, candles, not args.no_trades)
+
+    if args.cmd == "multibacktest":
+        return _run_multi_backtest(cfg, load_csv(args.csv), not args.no_trades)
 
     return 1
 

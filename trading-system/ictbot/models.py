@@ -129,6 +129,167 @@ class Signal:
         return self.reward / self.risk if self.risk else 0.0
 
 
+@dataclass
+class OrderBlock:
+    """ICT Order Block — last opposing candle before a displacement.
+
+    Bullish OB: last bearish (down-close) candle before a bullish displacement.
+    Bearish OB: last bullish (up-close) candle before a bearish displacement.
+
+    MTH (Mean Threshold) = 50% of the body (open-to-close).  Notes say
+    "candle bodies respect mean threshold [reaction off opening price]".
+    Wicks may trade through the OB but body-closes through MTH invalidate it.
+    """
+
+    direction: Direction          # LONG = bullish OB; SHORT = bearish OB
+    top: float                    # higher of open/close
+    bottom: float                 # lower of open/close
+    wick_high: float              # full candle high (including wick)
+    wick_low: float               # full candle low (including wick)
+    created_at: datetime
+    index: int
+    mitigated: bool = False
+    mitigated_at: Optional[datetime] = None
+
+    @property
+    def mth(self) -> float:
+        return (self.top + self.bottom) / 2.0
+
+    @property
+    def size(self) -> float:
+        return self.top - self.bottom
+
+    def contains(self, price: float) -> bool:
+        return self.bottom <= price <= self.top
+
+    def body_closed_through(self, candle: "Candle") -> bool:
+        if self.direction is Direction.LONG:
+            return candle.body_low < self.bottom
+        return candle.body_high > self.top
+
+
+@dataclass
+class RejectionBlock:
+    """ICT Rejection Block — a significant-wick candle used as a PD array.
+
+    Bullish RB: down-close candle with a long lower wick; buyers rejected lows.
+    Bearish RB: up-close candle with a long upper wick; sellers rejected highs.
+
+    CE (Consequent Encroachment) = 50% of the wick range (wick tip to body edge).
+    Notes: "CE = 50% wick range".  Price bodies should respect CE; a body-close
+    through CE makes the swing point "vulnerable".
+    """
+
+    direction: Direction
+    wick_tip: float               # extreme wick: low (bull RB) or high (bear RB)
+    body_edge: float              # body edge near the wick: body_low (bull) or body_high (bear)
+    created_at: datetime
+    index: int
+    mitigated: bool = False
+
+    @property
+    def ce(self) -> float:
+        return (self.wick_tip + self.body_edge) / 2.0
+
+    @property
+    def wick_size(self) -> float:
+        return abs(self.body_edge - self.wick_tip)
+
+
+@dataclass
+class BreakerBlock:
+    """ICT Breaker Block — a failed OB swept and flipped to the opposite role.
+
+    When price closes THROUGH an OB body, that OB converts to a Breaker:
+      Bullish Breaker: was a bearish OB, price closed above it → now support.
+      Bearish Breaker: was a bullish OB, price closed below it → now resistance.
+
+    Notes: "up close candle = bullish, down close candle = bearish"
+    "candle close through breaker block [change in state of delivery]"
+    CE = 50% of the breaker body range.
+    """
+
+    direction: Direction          # LONG = bullish breaker (support)
+    top: float
+    bottom: float
+    created_at: datetime
+    index: int                    # bar that closed through the original OB
+    mitigated: bool = False
+
+    @property
+    def ce(self) -> float:
+        return (self.top + self.bottom) / 2.0
+
+    @property
+    def size(self) -> float:
+        return self.top - self.bottom
+
+    def contains(self, price: float) -> bool:
+        return self.bottom <= price <= self.top
+
+
+@dataclass
+class OpeningRange:
+    """A 30-minute session Opening Range that anchors the session's narrative.
+
+    The algorithm establishes three key reference points during the window:
+    Opening Price, Session High, Session Low.  These become the blueprint for
+    how price delivers for the rest of that session.
+
+    Standard Deviation (SD) targets are projected from the OR extremes:
+      Bullish: or_high + sd_mult * range   (0.5, 1.0, 1.5, 2.5 multiples)
+      Bearish: or_low  - sd_mult * range   (0.5, 1.0, 1.5, 2.5 multiples)
+
+    The quadrant / label system (from the charts):
+      0    = OR Low
+      0.25 = lower quadrant
+      0.5  = Midpoint / CE (Consequent Encroachment)
+      0.75 = upper quadrant
+      1    = OR High
+      1.5 … = bullish SD extensions above
+      -0.5 … = bearish SD extensions below
+    """
+
+    label: str                    # "Midnight", "London", "NYKillZone", "AM", "PM"
+    or_open: float                # opening price of the first candle in the window
+    or_high: float
+    or_low: float
+    formed_at: datetime           # timestamp of the last OR candle
+    first_pfvg: Optional["FVG"] = None   # first FVG formed inside the OR window
+
+    @property
+    def range(self) -> float:
+        return self.or_high - self.or_low
+
+    @property
+    def midpoint(self) -> float:
+        return (self.or_high + self.or_low) / 2.0
+
+    @property
+    def upper_quadrant(self) -> float:
+        return self.or_low + 0.75 * self.range
+
+    @property
+    def lower_quadrant(self) -> float:
+        return self.or_low + 0.25 * self.range
+
+    def sd_target(self, direction: Direction, mult: float) -> float:
+        """Project a standard-deviation target from the OR extreme.
+
+        LONG: above OR_HIGH = or_high + mult * range
+        SHORT: below OR_LOW = or_low  - mult * range
+        """
+        if direction is Direction.LONG:
+            return self.or_high + mult * self.range
+        return self.or_low - mult * self.range
+
+    def normalized_level(self, price: float) -> float:
+        """Express price as a normalized OR level (0=low, 1=high)."""
+        if self.range == 0:
+            return 0.0
+        return (price - self.or_low) / self.range
+
+
 class ExitReason(Enum):
     TARGET = "target"
     STOP = "stop"
