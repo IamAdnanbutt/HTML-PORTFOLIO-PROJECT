@@ -305,38 +305,46 @@ class AsiaKillzoneModel:
         buf = self.cfg.strategy.stop_buffer_ticks * tick
         ndog = self._ndog
 
+        # Draw on liquidity, in priority order:
+        #   1. NWOG / PWH-PWL when supplied and it sits beyond the entry, then
+        #   2. the opposite NDOG extreme, then
+        #   3. a 1.0-SD projection of the NDOG range past that extreme.
+        # We take whichever is *furthest* in the trade direction so the draw is
+        # a genuine target rather than a level price has already reached.
+        rng_ = ndog.range
         if direction is Direction.LONG:
             stop = (self._sweep_extreme or ndog.low) - buf
-            # Target: NDOG High first, then NWOG / PWH if available.
-            target = ndog.high
-            if self._nwog_high and self._nwog_high > entry:
-                target = self._nwog_high
+            candidates = [ndog.high, ndog.high + rng_]
+            if self._nwog_high:
+                candidates.append(self._nwog_high)
+            target = max(c for c in candidates if c > entry) \
+                if any(c > entry for c in candidates) else ndog.high + rng_
         else:
             stop = (self._sweep_extreme or ndog.high) + buf
-            target = ndog.low
-            if self._nwog_low and self._nwog_low < entry:
-                target = self._nwog_low
+            candidates = [ndog.low, ndog.low - rng_]
+            if self._nwog_low:
+                candidates.append(self._nwog_low)
+            target = min(c for c in candidates if c < entry) \
+                if any(c < entry for c in candidates) else ndog.low - rng_
+
+        # Sanity: stop and target must each sit on the correct side of entry.
+        if direction is Direction.LONG and (stop >= entry or target <= entry):
+            self.state = AsiaState.DONE
+            return None
+        if direction is Direction.SHORT and (stop <= entry or target >= entry):
+            self.state = AsiaState.DONE
+            return None
+
+        # Reject degenerate, near-zero-risk entries (stop too close to entry).
+        if ndog.range > 0 and abs(entry - stop) < 0.25 * ndog.range:
+            self.state = AsiaState.DONE
+            return None
 
         risk = abs(entry - stop)
         if risk == 0:
             return None
         reward = abs(target - entry)
         if reward / risk < self.cfg.risk.min_rr:
-            # Fallback: use the NDOG extreme opposite to our trade.
-            if direction is Direction.LONG:
-                target = ndog.upper_quadrant
-            else:
-                target = ndog.lower_quadrant
-            reward = abs(target - entry)
-            if reward / risk < 1.5:
-                self.state = AsiaState.DONE
-                return None
-
-        # Sanity: stop must be strictly on the losing side of entry.
-        if direction is Direction.SHORT and stop <= entry:
-            self.state = AsiaState.DONE
-            return None
-        if direction is Direction.LONG and stop >= entry:
             self.state = AsiaState.DONE
             return None
 

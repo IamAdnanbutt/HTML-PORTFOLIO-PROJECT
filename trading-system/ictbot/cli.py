@@ -112,6 +112,8 @@ def main(argv=None) -> int:
     g.add_argument("--days", type=int, default=40)
     g.add_argument("--seed", type=int, default=7)
     g.add_argument("--out", required=True)
+    g.add_argument("--full-day", action="store_true",
+                   help="include overnight + Asia windows (all 5 systems)")
 
     # ---- Cat 1 single-system commands ----
     d = sub.add_parser("demo", parents=[common],
@@ -148,7 +150,7 @@ def main(argv=None) -> int:
     if args.cmd == "gen":
         candles = generate_sessions(args.days, args.seed,
                                     start_price=_start_price(args.symbol),
-                                    tick=tick)
+                                    tick=tick, full_day=args.full_day)
         write_csv(args.out, candles)
         print(f"Wrote {len(candles)} candles -> {args.out}")
         return 0
@@ -166,9 +168,10 @@ def main(argv=None) -> int:
         return _paper_stream(cfg, load_csv(args.csv))
 
     if args.cmd == "multidemo":
+        # Full-day data so the overnight + Asia systems get their windows.
         candles = generate_sessions(args.days, args.seed,
                                     start_price=_start_price(args.symbol),
-                                    tick=tick)
+                                    tick=tick, full_day=True)
         return _run_multi_backtest(cfg, candles, not args.no_trades)
 
     if args.cmd == "multibacktest":

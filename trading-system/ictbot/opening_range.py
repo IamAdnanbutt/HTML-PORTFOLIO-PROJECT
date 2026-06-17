@@ -70,9 +70,19 @@ class ORWindow:
     end: time     # inclusive (the last bar of the window)
     # Macro windows immediately after the OR that are valid entry times.
     macro_windows: List[Tuple[time, time]]
-    # How many macro-window bars we allow the entry to take.
-    # A sweep outside the window that is detected after OR closes still counts.
-    sweep_cutoff_bars: int = 60  # bars after OR end before we give up
+
+    @property
+    def last_macro_end(self) -> time:
+        """Clock time after which the setup is abandoned for the day.
+
+        The sweep → displacement → entry sequence is only useful up to the end
+        of the model's final macro window (entries are macro-only).  Some
+        windows — Midnight (02:50 macro) and London (03:15 macro) — sit hours
+        after the OR closes, so a bar-count cutoff would kill the setup long
+        before its macro ever arrived.  Using the macro clock keeps every model
+        alive exactly as long as it can still legitimately trade.
+        """
+        return max(e for _, e in self.macro_windows)
 
 
 # The 5 canonical OR windows (all times NY / Eastern).
@@ -146,14 +156,14 @@ class OpeningRangeModel:
         if self.state is ORState.BUILDING and self._or is not None:
             self.state = ORState.ARMED
             self.htf_bias = htf_bias
-            self._bars_since_or = 0
             return None
 
         if self.state in (ORState.DONE, ORState.BUILDING):
             return None
 
-        self._bars_since_or += 1
-        if self._bars_since_or > self.window.sweep_cutoff_bars:
+        # Abandon the setup once the model's last macro window has passed:
+        # entries are macro-only, so there is nothing left to wait for.
+        if t > self.window.last_macro_end:
             self.state = ORState.DONE
             return None
 
@@ -184,7 +194,6 @@ class OpeningRangeModel:
         self._sweep_side: Optional[Direction] = None
         self._sweep_extreme: Optional[float] = None
         self._entry_fvg: Optional[FVG] = None
-        self._bars_since_or: int = 0
 
     def _build_or_candle(self, c: Candle, idx: int) -> None:
         if self._or_open is None:
@@ -308,6 +317,13 @@ class OpeningRangeModel:
             self.state = ORState.DONE
             return None
         if direction is Direction.LONG and stop >= entry:
+            self.state = ORState.DONE
+            return None
+
+        # Reject degenerate setups: a stop only a couple of ticks from entry is
+        # not a real PD-array entry — the stop must give the trade room beyond
+        # the sweep (a meaningful fraction of the opening range).
+        if self._or.range > 0 and abs(entry - stop) < 0.25 * self._or.range:
             self.state = ORState.DONE
             return None
 

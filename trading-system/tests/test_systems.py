@@ -124,6 +124,38 @@ class TestMultiSystemRunner(unittest.TestCase):
                 self.assertGreater(sig.stop, sig.entry)
                 self.assertLess(sig.target, sig.entry)
 
+    def test_full_day_lights_up_overnight_systems(self):
+        """Full-day data must feed the overnight + Asia systems real setups."""
+        from ictbot.data import generate_sessions
+        from ictbot.models import Direction
+        from ictbot.runner import MultiSystemRunner
+        cfg = Config.for_symbol("NQ")
+        candles = generate_sessions(60, seed=42, tick=cfg.instrument.tick_size,
+                                    full_day=True)
+        result = MultiSystemRunner(cfg).run(candles)
+
+        # Every previously-dark system must now produce trades.
+        for key in ("Cat4_OR_Midnight", "Cat4_OR_London",
+                    "Cat4_OR_NYKillZone", "Cat5_AsiaKZ"):
+            self.assertGreater(result.systems[key].n_trades, 0,
+                               msg=f"{key} produced no trades on full-day data")
+
+        # Every trade — across all systems — must be structurally valid and
+        # carry a sane R-multiple (no degenerate near-zero-risk blow-ups).
+        for sysres in result.systems.values():
+            for t in sysres.trades:
+                sig = t.signal
+                if sig.direction is Direction.LONG:
+                    self.assertLess(sig.stop, sig.entry)
+                    self.assertGreater(sig.target, sig.entry)
+                else:
+                    self.assertGreater(sig.stop, sig.entry)
+                    self.assertLess(sig.target, sig.entry)
+                self.assertGreaterEqual(sig.rr, cfg.risk.min_rr - 1e-9)
+                self.assertGreater(t.r_multiple, -1.5)
+                self.assertLess(t.r_multiple, 25.0,
+                                msg=f"Implausible win: {t.r_multiple:.1f}R")
+
 
 if __name__ == "__main__":
     unittest.main()
