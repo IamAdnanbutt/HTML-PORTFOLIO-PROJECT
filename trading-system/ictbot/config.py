@@ -42,13 +42,20 @@ class SessionConfig:
 
 @dataclass
 class Instrument:
-    """Contract specification for a futures instrument."""
+    """Contract / symbol specification.
+
+    Futures use contract economics (``point_value`` = $ per 1.00 move per
+    contract). For Alpaca-tradeable proxies there are no futures, so equities
+    and crypto are modelled as ``point_value = 1.0`` (1 unit moves $1 per $1 of
+    price) and sized in shares / units rather than contracts.
+    """
 
     symbol: str
     tick_size: float          # minimum price increment
     tick_value: float         # $ per tick per contract
     point_value: float        # $ per 1.00 price move per contract
     commission: float = 2.5   # $ per side per contract
+    asset_class: str = "futures"   # "futures" | "equity" | "crypto"
 
 
 # The notes recommend NQ and ES "where liquidity delivery is consistent".
@@ -57,7 +64,20 @@ INSTRUMENTS = {
     "ES": Instrument("ES", tick_size=0.25, tick_value=12.5, point_value=50.0),
     "MNQ": Instrument("MNQ", tick_size=0.25, tick_value=0.5, point_value=2.0),
     "MES": Instrument("MES", tick_size=0.25, tick_value=1.25, point_value=5.0),
+    # --- Alpaca-tradeable proxies (Alpaca offers no futures) ---------------
+    # Index ETFs (RTH) — the natural NQ/ES proxies for the 9:30 model …
+    "QQQ": Instrument("QQQ", 0.01, 0.01, 1.0, commission=0.0, asset_class="equity"),
+    "SPY": Instrument("SPY", 0.01, 0.01, 1.0, commission=0.0, asset_class="equity"),
+    # … plus leveraged ETFs that carry the day's volatility.
+    "TQQQ": Instrument("TQQQ", 0.01, 0.01, 1.0, commission=0.0, asset_class="equity"),
+    "SQQQ": Instrument("SQQQ", 0.01, 0.01, 1.0, commission=0.0, asset_class="equity"),
+    "SOXL": Instrument("SOXL", 0.01, 0.01, 1.0, commission=0.0, asset_class="equity"),
+    # Crypto (24/7) — keeps the overnight ORs and Asia Killzone fed.
+    "BTC/USD": Instrument("BTC/USD", 1.0, 1.0, 1.0, commission=0.0, asset_class="crypto"),
+    "ETH/USD": Instrument("ETH/USD", 0.1, 0.1, 1.0, commission=0.0, asset_class="crypto"),
+    "SOL/USD": Instrument("SOL/USD", 0.01, 0.01, 1.0, commission=0.0, asset_class="crypto"),
 }
+
 
 
 @dataclass
