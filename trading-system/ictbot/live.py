@@ -39,6 +39,8 @@ class LiveRunner:
         self._prev_day: List[Candle] = []
         self._prev_session: List[Candle] = []
         self._today: List[Candle] = []
+        self._last_session_candle: Optional[Candle] = None
+        self._session_flattened = False
 
     def on_candle(self, candle: Candle) -> List[str]:
         msgs: List[str] = []
@@ -46,9 +48,11 @@ class LiveRunner:
 
         # ---- session rollover -------------------------------------------
         if candle.time.date() != self._cur_day:
-            # flatten anything left from yesterday at the previous close
-            if self._today:
-                for tr in self.broker.flatten(self._today[-1],
+            # If yesterday had no after-hours bar to trigger the close flatten,
+            # flatten now at its session-close candle (never an overnight bar).
+            if self._today and not self._session_flattened:
+                close_bar = self._last_session_candle or self._today[-1]
+                for tr in self.broker.flatten(close_bar,
                                               ExitReason.SESSION_CLOSE):
                     self.closed.append(tr)
                     msgs.append(self._fmt_exit(tr))
@@ -59,14 +63,20 @@ class LiveRunner:
             self._today = []
             self._day_premarket = []
             self._trades_today = 0
+            self._last_session_candle = None
+            self._session_flattened = False
             # session is primed at the open (below), once pre-market is known
 
         self.history.append(candle)
         self._today.append(candle)
         t = candle.time.time()
 
-        if t < s.open_time:
+        # Pre-market window matches the back-tester (premarket_start..open); any
+        # earlier overnight bars must not pollute the pools or the sweep read.
+        if s.premarket_start <= t < s.open_time:
             self._day_premarket.append(candle)
+        if s.open_time <= t <= s.close_time:
+            self._last_session_candle = candle
 
         # Prime the model exactly once, on the first bar at/after the open.
         if t >= s.open_time and self.model.session_date != self._cur_day:
@@ -75,9 +85,22 @@ class LiveRunner:
             bias = htf_bias(self.history, candle.time,
                             swing_lookback=self.cfg.strategy.swing_lookback)
             self.model.start_session(self._cur_day, pools, bias)
+            # Replay pre-market bars through the freshly-armed model so a
+            # pre-open liquidity sweep (the Continuation setup) is registered —
+            # exactly what the back-tester sees by feeding the whole session.
+            for pmc in self._day_premarket:
+                self.model.on_candle(pmc)
             if bias is not None:
                 msgs.append(f"[{candle.time:%Y-%m-%d}] open: HTF bias = "
                             f"{bias.name}; armed.")
+
+        # ---- flatten at the session close (not on after-hours bars) -----
+        if t > s.close_time and not self._session_flattened:
+            close_bar = self._last_session_candle or candle
+            for tr in self.broker.flatten(close_bar, ExitReason.SESSION_CLOSE):
+                self.closed.append(tr)
+                msgs.append(self._fmt_exit(tr))
+            self._session_flattened = True
 
         # ---- manage open positions on this bar --------------------------
         for tr in self.broker.update(candle):
@@ -85,7 +108,8 @@ class LiveRunner:
             msgs.append(self._fmt_exit(tr))
 
         # ---- ask for a new signal ---------------------------------------
-        if self._trades_today < self.cfg.risk.max_trades_per_day:
+        if (not self._session_flattened
+                and self._trades_today < self.cfg.risk.max_trades_per_day):
             signal = self.model.on_candle(candle)
             if signal is not None:
                 size = position_size(signal, self.cfg.instrument, self.cfg.risk)
@@ -97,6 +121,21 @@ class LiveRunner:
                         f"{signal.direction.name} {size}x @ {signal.entry:.2f} "
                         f"stop {signal.stop:.2f} target {signal.target:.2f} "
                         f"(RR {signal.rr:.1f})  -> {signal.reason}")
+        return msgs
+
+    def finalize(self) -> List[str]:
+        """Flatten any position still open when the stream ends.
+
+        Without this the final day's trade is left open and omitted from the
+        summary; here it is closed at that day's session-close candle.
+        """
+        msgs: List[str] = []
+        close_bar = self._last_session_candle or (self._today[-1]
+                                                  if self._today else None)
+        if close_bar is not None:
+            for tr in self.broker.flatten(close_bar, ExitReason.SESSION_CLOSE):
+                self.closed.append(tr)
+                msgs.append(self._fmt_exit(tr))
         return msgs
 
     def _fmt_exit(self, tr: Trade) -> str:

@@ -44,7 +44,7 @@ from typing import List, Optional, Tuple
 from .config import Config
 from .indicators import atr, find_fvg, is_displacement
 from .models import (Candle, Direction, FVG, LiquidityPool, OpeningRange,
-                     Signal)
+                     Signal, round_to_tick)
 from .pd_arrays import nearest_order_block, scan_breaker_blocks
 
 
@@ -311,6 +311,10 @@ class OpeningRangeModel:
         # Escalate target to 1.5 SD if HTF draw aligns.
         if self.htf_bias is direction:
             target = self._or.sd_target(direction, 1.5)
+
+        entry = round_to_tick(entry, tick)
+        stop = round_to_tick(stop, tick)
+        target = round_to_tick(target, tick)
 
         # Sanity: stop must be strictly on the losing side of entry.
         if direction is Direction.SHORT and stop <= entry:

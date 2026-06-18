@@ -29,6 +29,20 @@ class Direction(Enum):
         return Direction.SHORT if self is Direction.LONG else Direction.LONG
 
 
+def round_to_tick(price: float, tick: float) -> float:
+    """Snap a price to the nearest valid tick.
+
+    Entry/stop/target prices are derived from FVG midpoints and SD projections,
+    which can land on a fraction of a tick (e.g. an 0.125 entry on a 0.25-tick
+    instrument). A real futures broker rejects such limit prices, and a
+    back-test that fills at them reports prices that could never have traded, so
+    every order price is snapped to the instrument's tick before use.
+    """
+    if tick <= 0:
+        return price
+    return round(round(price / tick) * tick, 10)
+
+
 @dataclass(frozen=True)
 class Candle:
     """A single OHLCV bar."""

@@ -45,7 +45,7 @@ from typing import List, Optional, Tuple
 
 from .config import Config
 from .indicators import atr, find_fvg, is_displacement
-from .models import Candle, Direction, FVG, LiquidityPool, Signal
+from .models import Candle, Direction, FVG, LiquidityPool, Signal, round_to_tick
 from .pd_arrays import nearest_breaker, nearest_order_block
 
 
@@ -259,11 +259,13 @@ class SetupForLife:
                       entry: float) -> Optional[Signal]:
         tick = self.cfg.instrument.tick_size
         buf = self.cfg.strategy.stop_buffer_ticks * tick
+        entry = round_to_tick(entry, tick)
 
         if direction is Direction.LONG:
             stop = (self._sweep_extreme or candle.low) - buf
         else:
             stop = (self._sweep_extreme or candle.high) + buf
+        stop = round_to_tick(stop, tick)
 
         # Target: nearest draw-on-liquidity in the direction of the trade.
         from .liquidity import nearest_target_pool
@@ -273,7 +275,7 @@ class SetupForLife:
         if target_pool is None:
             self.state = SetupState.DONE
             return None
-        target = target_pool.price
+        target = round_to_tick(target_pool.price, tick)
 
         # Sanity check: stop must be strictly on the correct side of entry.
         if direction is Direction.LONG and stop >= entry:

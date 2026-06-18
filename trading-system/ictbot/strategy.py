@@ -30,7 +30,7 @@ from typing import List, Optional
 from .config import Config
 from .indicators import atr, find_fvg, is_displacement
 from .liquidity import detect_sweep, nearest_target_pool
-from .models import Candle, Direction, FVG, LiquidityPool, Signal
+from .models import Candle, Direction, FVG, LiquidityPool, Signal, round_to_tick
 
 
 class State(Enum):
@@ -216,10 +216,12 @@ class NineThirtyOpenModel:
     def _build_signal(self, candle: Candle, entry: float) -> Optional[Signal]:
         tick = self.cfg.instrument.tick_size
         buf = self.cfg.strategy.stop_buffer_ticks * tick
+        entry = round_to_tick(entry, tick)
         if self.bias is Direction.LONG:
             stop = (self.manip_extreme or candle.low) - buf
         else:
             stop = (self.manip_extreme or candle.high) + buf
+        stop = round_to_tick(stop, tick)
 
         risk = abs(entry - stop)
         min_dist = risk * self.cfg.risk.min_rr
@@ -228,7 +230,7 @@ class NineThirtyOpenModel:
         if target_pool is None:
             self.state = State.DONE
             return None
-        target = target_pool.price
+        target = round_to_tick(target_pool.price, tick)
 
         signal = Signal(
             time=candle.time,

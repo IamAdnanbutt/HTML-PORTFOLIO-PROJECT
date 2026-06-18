@@ -53,7 +53,7 @@ from typing import List, Optional, Tuple
 
 from .config import Config
 from .indicators import atr, find_fvg
-from .models import Candle, Direction, FVG, LiquidityPool, Signal
+from .models import Candle, Direction, FVG, LiquidityPool, Signal, round_to_tick
 
 
 # ----------------------------------------------------------------- time bounds
@@ -326,6 +326,10 @@ class AsiaKillzoneModel:
                 candidates.append(self._nwog_low)
             target = min(c for c in candidates if c < entry) \
                 if any(c < entry for c in candidates) else ndog.low - rng_
+
+        entry = round_to_tick(entry, tick)
+        stop = round_to_tick(stop, tick)
+        target = round_to_tick(target, tick)
 
         # Sanity: stop and target must each sit on the correct side of entry.
         if direction is Direction.LONG and (stop >= entry or target <= entry):

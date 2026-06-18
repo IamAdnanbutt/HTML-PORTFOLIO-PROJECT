@@ -91,6 +91,8 @@ def _paper_stream(cfg: Config, candles: List[Candle]) -> int:
     for c in candles:
         for msg in runner.on_candle(c):
             print(msg)
+    for msg in runner.finalize():   # close any position still open at stream end
+        print(msg)
     print("\nPaper session complete.")
     print(runner.result_summary())
     return 0
