@@ -88,7 +88,9 @@ class RiskConfig:
     risk_per_trade: float = 0.005      # 0.5% of account risked per trade
     max_trades_per_day: int = 1        # notes: anchor on the *first* PFVG
     min_rr: float = 2.0                # skip setups that cannot reach >= 2R
-    max_contracts: int = 20            # hard cap on position size
+    max_contracts: int = 20            # hard cap (futures contracts)
+    max_shares: int = 1000             # hard cap (equity shares)
+    max_notional: float = 100_000.0    # per-position notional ceiling (equity/crypto)
 
 
 @dataclass

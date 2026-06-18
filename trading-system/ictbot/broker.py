@@ -20,17 +20,36 @@ from .models import Candle, Direction, ExitReason, Signal, Trade
 
 
 def position_size(signal: Signal, instrument: Instrument,
-                  risk: RiskConfig) -> int:
-    """Contracts to trade so that a stop-out loses ~``risk_per_trade``."""
+                  risk: RiskConfig) -> float:
+    """Size a position so a stop-out loses ~``risk_per_trade`` of the account.
+
+    Returns whole units for futures (contracts) and equities (shares), and a
+    fractional quantity for crypto. Equity and crypto sizes are additionally
+    capped so a single position's notional stays under ``max_notional``.
+    """
     risk_dollars = risk.account_size * risk.risk_per_trade
     stop_points = abs(signal.entry - signal.stop)
     if stop_points <= 0:
         return 0
-    per_contract_loss = stop_points * instrument.point_value
-    if per_contract_loss <= 0:
+    per_unit_loss = stop_points * instrument.point_value
+    if per_unit_loss <= 0:
         return 0
-    n = int(risk_dollars // per_contract_loss)
-    return max(0, min(n, risk.max_contracts))
+    raw = risk_dollars / per_unit_loss
+
+    if instrument.asset_class == "crypto":
+        # Fractional units, capped by the per-position notional ceiling.
+        size = raw
+        if signal.entry > 0:
+            size = min(size, risk.max_notional / signal.entry)
+        return round(max(0.0, size), 6)
+
+    # Whole units: futures contracts or equity shares.
+    cap = risk.max_shares if instrument.asset_class == "equity" \
+        else risk.max_contracts
+    n = int(raw)
+    if instrument.asset_class == "equity" and signal.entry > 0:
+        n = min(n, int(risk.max_notional / signal.entry))
+    return max(0, min(n, cap))
 
 
 class Broker(ABC):

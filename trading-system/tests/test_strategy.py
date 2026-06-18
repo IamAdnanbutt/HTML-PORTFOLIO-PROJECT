@@ -69,6 +69,20 @@ class TestBroker(unittest.TestCase):
         size = position_size(sig, self.cfg.instrument, self.cfg.risk)
         self.assertEqual(size, 1)
 
+    def test_position_size_equity_shares(self):
+        cfg = Config.for_symbol("QQQ")            # equity: $1/share, $0.01 tick
+        sig = Signal(time=datetime(2026, 1, 5, 9, 50), direction=Direction.LONG,
+                     entry=100.0, stop=98.0, target=104.0, model="OR_AM")
+        # $500 budget / ($2 stop * $1/share) = 250 shares (under both caps)
+        self.assertEqual(position_size(sig, cfg.instrument, cfg.risk), 250)
+
+    def test_position_size_crypto_fractional(self):
+        cfg = Config.for_symbol("BTC/USD")        # crypto: fractional units
+        sig = Signal(time=datetime(2026, 1, 5, 2, 50), direction=Direction.LONG,
+                     entry=60000.0, stop=59000.0, target=63000.0, model="OR_Midnight")
+        # $500 budget / ($1000 stop * $1/unit) = 0.5 BTC (notional cap 1.66 BTC)
+        self.assertAlmostEqual(position_size(sig, cfg.instrument, cfg.risk), 0.5)
+
     def test_long_hits_target(self):
         broker = PaperBroker(self.cfg.instrument)
         sig = Signal(time=datetime(2026, 1, 5, 9, 30), direction=Direction.LONG,
