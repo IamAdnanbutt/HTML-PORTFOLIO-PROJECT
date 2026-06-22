@@ -19,6 +19,14 @@ from __future__ import annotations
 import time as _time
 from datetime import datetime
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
+
+_ET = ZoneInfo("America/New_York")
+
+
+def _now_et() -> datetime:
+    """Current time on the Eastern clock the session logic is defined in."""
+    return datetime.now(_ET).replace(tzinfo=None)
 
 from .alpaca import (bars_to_candles, screener_symbols, stats_from_bars)
 from .config import Config, INSTRUMENTS, Instrument
@@ -112,7 +120,7 @@ class ForwardTester:
         return out
 
     def cycle(self, now: Optional[datetime] = None) -> List[str]:
-        now = now or datetime.now()
+        now = now or _now_et()
         return self.process(now, self.select(now, active_asset_class(now.time())))
 
     def run(self, cycles: Optional[int] = None, poll_seconds: int = 60) -> None:
