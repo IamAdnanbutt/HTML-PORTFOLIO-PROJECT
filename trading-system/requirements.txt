@@ -1,0 +1,6 @@
+# ictbot runs on the Python standard library only (Python 3.10+).
+# There are no third-party runtime dependencies, which is why this file is
+# intentionally empty. If you later add live data feeds or plotting, pin them
+# here, e.g.:
+#   pandas>=2.0
+#   matplotlib>=3.8
