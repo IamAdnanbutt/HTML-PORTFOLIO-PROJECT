@@ -145,6 +145,17 @@ def main(argv=None) -> int:
     mb.add_argument("--csv", required=True)
     mb.add_argument("--no-trades", action="store_true")
 
+    # ---- live (paper) forward test against Alpaca ----
+    ft = sub.add_parser("forwardtest", parents=[common],
+                        help="[LIVE] dry-run paper forward-test vs Alpaca "
+                             "(needs ALPACA_API_KEY/SECRET; places NO orders)")
+    ft.add_argument("--top-k", type=int, default=3,
+                    help="how many ranked symbols to trade at once")
+    ft.add_argument("--cycles", type=int, default=None,
+                    help="number of poll cycles (default: run forever)")
+    ft.add_argument("--poll", type=int, default=60,
+                    help="seconds between cycles")
+
     args = p.parse_args(argv)
     cfg = Config.for_symbol(args.symbol)
     tick = cfg.instrument.tick_size
@@ -178,6 +189,22 @@ def main(argv=None) -> int:
 
     if args.cmd == "multibacktest":
         return _run_multi_backtest(cfg, load_csv(args.csv), not args.no_trades)
+
+    if args.cmd == "forwardtest":
+        from .alpaca import AlpacaClient
+        from .forwardtest import ForwardTester
+        try:
+            client = AlpacaClient()          # reads ALPACA_API_KEY / _SECRET
+        except RuntimeError as e:
+            print(e, file=sys.stderr)
+            return 2
+        print("Forward test (DRY RUN — no orders). Ctrl-C to stop.")
+        try:
+            ForwardTester(client, top_k=args.top_k).run(
+                cycles=args.cycles, poll_seconds=args.poll)
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return 0
 
     return 1
 
